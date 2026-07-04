@@ -1,0 +1,23 @@
+{
+  "client_id": "c_...",
+  "client_secret": "s_...",
+  "account_seq": null,
+  "strategy": {
+    "symbol": "TQQQ",
+    "currency": "USD",
+    "average_down_buy_quantity": "1",
+    "previous_close_buy_quantity": "1",
+    "previous_close_multiplier": "1.15",
+    "take_profit_multiplier": "1.10",
+    "min_cash_buffer": "0"
+  },
+  "telegram": {
+    "bot_token": "",
+    "allowed_chat_ids": [],
+    "auto": {
+      "enabled": true,
+      "run_at": "18:00",
+      "timezone": "Asia/Seoul"
+    }
+  }
+}
