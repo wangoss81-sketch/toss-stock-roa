@@ -53,9 +53,34 @@ cp config.example.json config.json
 ./run.sh bot --config config.json
 ```
 
+VM에서 24시간 서비스로 등록:
+
+```bash
+chmod +x scripts/install_systemd.sh
+./scripts/install_systemd.sh
+```
+
+서비스 로그 확인:
+
+```bash
+sudo journalctl -u toss-roa.service -f
+```
+
 ## 텔레그램 명령
 
-- `/status`: 현재가, 전날 종가, 보유 수량, 평단가, 매수 가능 금액, 진행 중 주문 수
+봇은 입력창 아래에 버튼 메뉴를 표시합니다. 버튼을 누르면 해당 명령과 같은 동작을 합니다.
+
+- `상태 조회`: `/status`
+- `주문 미리보기`: `/plan`
+- `현재 주문`: `/orders`
+- `자동 상태`: `/auto`
+- `자동 ON`: `/auto_on`
+- `자동 OFF`: `/auto_off`
+- `실행`: 실제 주문 확인 버튼을 표시
+
+`실행` 버튼은 바로 주문을 제출하지 않습니다. `주문 실행 확인`을 한 번 더 눌러야 실제 주문이 제출됩니다.
+
+- `/status`: 현재가, 전날 종가, 보유 수량, 평단가, 평단 대비 수익률, 목표 매도가, 목표까지 남은 비율, 매수 가능 금액, 진행 중 주문 수
 - `/plan`: 오늘 걸 주문 미리보기
 - `/orders`: 진행 중인 TQQQ 주문 상세 보기
 - `/run`: 실제 주문 제출

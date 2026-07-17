@@ -4,7 +4,7 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -31,6 +31,7 @@ class StrategySnapshot:
     open_orders: list[dict[str, Any]]
     planned_orders: list[PlannedOrder]
     market_open: bool
+    take_profit_multiplier: Decimal
     market_message: str | None = None
 
 
@@ -100,6 +101,7 @@ def build_snapshot(context: AppContext) -> StrategySnapshot:
         open_orders=open_orders,
         planned_orders=planned_orders,
         market_open=market_open,
+        take_profit_multiplier=strategy.take_profit_multiplier,
         market_message=market_message,
     )
 
@@ -123,10 +125,23 @@ def format_snapshot(snapshot: StrategySnapshot, include_plan: bool = False) -> s
         f"전날 종가: {snapshot.previous_close} {snapshot.currency}",
         f"보유수량: {snapshot.position.quantity}",
         f"평균단가: {snapshot.position.average_price}",
-        f"매수가능금액: {snapshot.cash_buying_power} {snapshot.currency}",
-        f"진행 중 주문: {len(snapshot.open_orders)}건",
-        f"미국장: {'영업일' if snapshot.market_open else '휴장'}",
     ]
+    if snapshot.position.exists:
+        target_price = snapshot.position.average_price * snapshot.take_profit_multiplier
+        lines.extend(
+            [
+                f"평단 대비: {format_percent(percent_change(snapshot.last_price, snapshot.position.average_price))}",
+                f"목표 매도가: {format_money(target_price)} {snapshot.currency}",
+                f"목표까지: {format_percent(percent_change(target_price, snapshot.last_price))}",
+            ]
+        )
+    lines.extend(
+        [
+            f"매수가능금액: {snapshot.cash_buying_power} {snapshot.currency}",
+            f"진행 중 주문: {len(snapshot.open_orders)}건",
+            f"미국장: {'영업일' if snapshot.market_open else '휴장'}",
+        ]
+    )
     if snapshot.market_message:
         lines.append(snapshot.market_message)
     if include_plan:
@@ -177,6 +192,22 @@ def format_open_orders(orders: list[dict[str, Any]], symbol: str) -> str:
         if order.get("orderedAt"):
             lines.append(f"주문시각: {order['orderedAt']}")
     return "\n".join(lines)
+
+
+def percent_change(new_value: Decimal, base_value: Decimal) -> Decimal:
+    if base_value == 0:
+        return Decimal("0")
+    return ((new_value - base_value) / base_value) * Decimal("100")
+
+
+def format_percent(value: Decimal) -> str:
+    rounded = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    sign = "+" if rounded > 0 else ""
+    return f"{sign}{rounded}%"
+
+
+def format_money(value: Decimal) -> str:
+    return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def us_local_date() -> str:

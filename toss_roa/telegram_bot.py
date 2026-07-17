@@ -37,10 +37,13 @@ class TelegramClient:
             params["offset"] = offset
         return self._request("getUpdates", params)["result"]
 
-    def send_message(self, chat_id: int, text: str) -> None:
+    def send_message(self, chat_id: int, text: str, reply_markup: dict[str, Any] | None = None) -> None:
         chunks = split_message(text)
         for chunk in chunks:
-            self._request("sendMessage", {"chat_id": chat_id, "text": chunk})
+            params: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
+            if reply_markup is not None:
+                params["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
+            self._request("sendMessage", params)
 
     def _request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         body = urllib.parse.urlencode(params).encode()
@@ -65,7 +68,7 @@ class TossRoaBot:
         self.last_auto_run_date: str | None = None
 
     def run_forever(self) -> None:
-        self._broadcast("Toss ROA 봇이 시작됐습니다. /help 로 명령을 확인하세요.")
+        self._broadcast("Toss ROA 봇이 시작됐습니다. 아래 버튼이나 /help 로 명령을 확인하세요.")
         while True:
             self._run_auto_if_due()
             try:
@@ -88,36 +91,40 @@ class TossRoaBot:
             self.telegram.send_message(chat_id, "허용되지 않은 채팅입니다.")
             return
 
-        command = text.split()[0].split("@")[0].lower()
+        command = normalize_command(text)
         try:
             if command in {"/start", "/help"}:
-                self.telegram.send_message(chat_id, help_text())
+                self.telegram.send_message(chat_id, help_text(), main_keyboard())
             elif command == "/whoami":
-                self.telegram.send_message(chat_id, f"chat_id: {chat_id}")
+                self.telegram.send_message(chat_id, f"chat_id: {chat_id}", main_keyboard())
             elif command == "/status":
                 snapshot = build_snapshot(self.context)
-                self.telegram.send_message(chat_id, format_snapshot(snapshot))
+                self.telegram.send_message(chat_id, format_snapshot(snapshot), main_keyboard())
             elif command == "/plan":
                 snapshot = build_snapshot(self.context)
-                self.telegram.send_message(chat_id, format_snapshot(snapshot, include_plan=True))
+                self.telegram.send_message(chat_id, format_snapshot(snapshot, include_plan=True), main_keyboard())
             elif command == "/orders":
                 orders = self.context.client.get_orders(self.context.account_seq, "OPEN", self.context.strategy.symbol)
-                self.telegram.send_message(chat_id, format_open_orders(orders, self.context.strategy.symbol))
+                self.telegram.send_message(chat_id, format_open_orders(orders, self.context.strategy.symbol), main_keyboard())
+            elif command == "/run_confirm":
+                self.telegram.send_message(chat_id, "실제 주문을 제출할까요?", confirm_keyboard())
             elif command == "/run":
-                self.telegram.send_message(chat_id, self._execute_once())
+                self.telegram.send_message(chat_id, self._execute_once(), main_keyboard())
+            elif command == "/cancel":
+                self.telegram.send_message(chat_id, "취소했습니다.", main_keyboard())
             elif command == "/auto_on":
                 self.auto_enabled = True
-                self.telegram.send_message(chat_id, f"자동 실행을 켰습니다. 매일 {self.telegram_config.auto_run_at} {self.telegram_config.timezone}")
+                self.telegram.send_message(chat_id, f"자동 실행을 켰습니다. 매일 {self.telegram_config.auto_run_at} {self.telegram_config.timezone}", main_keyboard())
             elif command == "/auto_off":
                 self.auto_enabled = False
-                self.telegram.send_message(chat_id, "자동 실행을 껐습니다.")
+                self.telegram.send_message(chat_id, "자동 실행을 껐습니다.", main_keyboard())
             elif command == "/auto":
                 status = "ON" if self.auto_enabled else "OFF"
-                self.telegram.send_message(chat_id, f"자동 실행: {status}\n시간: {self.telegram_config.auto_run_at} {self.telegram_config.timezone}")
+                self.telegram.send_message(chat_id, f"자동 실행: {status}\n시간: {self.telegram_config.auto_run_at} {self.telegram_config.timezone}", main_keyboard())
             else:
-                self.telegram.send_message(chat_id, "알 수 없는 명령입니다. /help 를 입력하세요.")
+                self.telegram.send_message(chat_id, "알 수 없는 명령입니다. /help 를 입력하세요.", main_keyboard())
         except Exception as exc:
-            self.telegram.send_message(chat_id, f"오류: {exc}")
+            self.telegram.send_message(chat_id, f"오류: {exc}", main_keyboard())
 
     def _execute_once(self) -> str:
         snapshot = build_snapshot(self.context)
@@ -146,7 +153,7 @@ class TossRoaBot:
 
     def _broadcast(self, text: str) -> None:
         for chat_id in self.telegram_config.allowed_chat_ids:
-            self.telegram.send_message(chat_id, text)
+            self.telegram.send_message(chat_id, text, main_keyboard())
 
     def _is_allowed(self, chat_id: int) -> bool:
         return not self.telegram_config.allowed_chat_ids or chat_id in self.telegram_config.allowed_chat_ids
@@ -183,11 +190,53 @@ def help_text() -> str:
             "/plan - 오늘 걸 주문 미리보기",
             "/orders - 진행 중 주문 상세",
             "/run - 실제 주문 제출",
+            "버튼의 실행은 확인 단계를 거친 뒤 주문을 제출합니다.",
             "/auto - 자동 실행 상태",
             "/auto_on - 자동 실행 켜기",
             "/auto_off - 자동 실행 끄기",
         ]
     )
+
+
+def normalize_command(text: str) -> str:
+    button_commands = {
+        "상태 조회": "/status",
+        "주문 미리보기": "/plan",
+        "현재 주문": "/orders",
+        "자동 상태": "/auto",
+        "자동 on": "/auto_on",
+        "자동 off": "/auto_off",
+        "실행": "/run_confirm",
+        "주문 실행 확인": "/run",
+        "취소": "/cancel",
+        "도움말": "/help",
+    }
+    normalized = text.strip()
+    return button_commands.get(normalized.lower(), normalized.split()[0].split("@")[0].lower())
+
+
+def main_keyboard() -> dict[str, Any]:
+    return {
+        "keyboard": [
+            [{"text": "상태 조회"}, {"text": "주문 미리보기"}],
+            [{"text": "현재 주문"}, {"text": "자동 상태"}],
+            [{"text": "자동 ON"}, {"text": "자동 OFF"}],
+            [{"text": "실행"}, {"text": "도움말"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": True,
+    }
+
+
+def confirm_keyboard() -> dict[str, Any]:
+    return {
+        "keyboard": [
+            [{"text": "주문 실행 확인"}, {"text": "취소"}],
+            [{"text": "상태 조회"}, {"text": "주문 미리보기"}],
+        ],
+        "resize_keyboard": True,
+        "one_time_keyboard": True,
+    }
 
 
 def split_message(text: str, limit: int = 3900) -> list[str]:
