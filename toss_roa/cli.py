@@ -5,7 +5,14 @@ import json
 
 from pathlib import Path
 
-from toss_roa.engine import build_snapshot, format_snapshot, load_context, load_json, submit_planned_orders
+from toss_roa.engine import (
+    build_snapshot,
+    format_snapshot,
+    format_submission_results,
+    load_context,
+    load_json,
+    submit_planned_orders,
+)
 from toss_roa.toss_client import TossApiError, TossCredentials, TossInvestClient
 
 
@@ -45,8 +52,9 @@ def run(args: argparse.Namespace) -> None:
         return
 
     if args.execute:
-        print("\n=== 주문 제출 결과 ===")
-        print_json(submit_planned_orders(context, snapshot))
+        results = submit_planned_orders(context, snapshot)
+        print()
+        print(format_submission_results(snapshot, results))
     else:
         print("\n드라이런: 실제 주문은 제출하지 않았습니다. 실행하려면 --execute를 붙이세요.")
 

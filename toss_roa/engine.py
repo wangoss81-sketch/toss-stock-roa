@@ -9,7 +9,15 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from toss_roa.strategy import InfiniteBuyPlanner, PlannedOrder, Position, StrategyConfig, parse_config, position_from_holdings
+from toss_roa.strategy import (
+    InfiniteBuyPlanner,
+    PlannedOrder,
+    Position,
+    StrategyConfig,
+    format_decimal,
+    parse_config,
+    position_from_holdings,
+)
 from toss_roa.toss_client import TossCredentials, TossInvestClient
 
 
@@ -155,10 +163,48 @@ def format_snapshot(snapshot: StrategySnapshot, include_plan: bool = False) -> s
             lines.append("생성할 주문이 없습니다.")
         else:
             for index, order in enumerate(snapshot.planned_orders, start=1):
-                payload = order.to_toss_payload(snapshot.symbol)
+                if index > 1:
+                    lines.append("")
                 lines.append(f"{index}. {order.reason}")
-                lines.append(json.dumps(payload, ensure_ascii=False))
+                lines.extend(format_planned_order(order, snapshot.symbol, snapshot.currency))
     return "\n".join(lines)
+
+
+def format_planned_order(order: PlannedOrder, symbol: str, currency: str) -> list[str]:
+    order_method = "종가 지정가(LOC)" if order.time_in_force == "CLS" else "지정가"
+    lines = [
+        f"종목: {symbol}",
+        f"구분: {'매도' if order.side == 'SELL' else '매수'}",
+        f"주문방식: {order_method}",
+    ]
+    if order.quantity is not None:
+        lines.append(f"수량: {format_decimal(order.quantity)}주")
+    if order.price is not None:
+        lines.append(f"가격: {format_money(order.price)} {currency}")
+    if order.order_amount is not None:
+        lines.append(f"주문금액: {format_money(order.order_amount)} {currency}")
+    return lines
+
+
+def format_submission_results(snapshot: StrategySnapshot, results: list[dict[str, Any]]) -> str:
+    lines = ["=== 주문 제출 결과 ==="]
+    for index, order in enumerate(snapshot.planned_orders, start=1):
+        result = results[index - 1] if index <= len(results) else {}
+        status = "접수 완료" if result.get("orderId") else "응답 확인 필요"
+        lines.append("")
+        lines.append(f"{index}. {planned_order_name(order)} {status}")
+        lines.extend(format_planned_order(order, snapshot.symbol, snapshot.currency))
+    return "\n".join(lines)
+
+
+def planned_order_name(order: PlannedOrder) -> str:
+    if order.side == "SELL":
+        return "전량 매도 주문"
+    if "평단가" in order.reason:
+        return "평단가 기준 LOC 매수 주문"
+    if "전날 종가" in order.reason:
+        return "전날 종가 기준 LOC 매수 주문"
+    return "매수 주문"
 
 
 def format_open_orders(orders: list[dict[str, Any]], symbol: str) -> str:

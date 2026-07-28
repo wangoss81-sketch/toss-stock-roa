@@ -13,8 +13,16 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from toss_roa.engine import AppContext
-from toss_roa.engine import build_snapshot, format_open_orders, format_snapshot, load_context, load_json, submit_planned_orders
+from toss_roa.engine import (
+    AppContext,
+    build_snapshot,
+    format_open_orders,
+    format_snapshot,
+    format_submission_results,
+    load_context,
+    load_json,
+    submit_planned_orders,
+)
 
 
 @dataclass(frozen=True)
@@ -133,7 +141,7 @@ class TossRoaBot:
         if not snapshot.planned_orders:
             return "제출할 주문이 없습니다."
         results = submit_planned_orders(self.context, snapshot)
-        return format_snapshot(snapshot, include_plan=True) + "\n\n=== 주문 제출 결과 ===\n" + json.dumps(results, ensure_ascii=False, indent=2)
+        return format_snapshot(snapshot, include_plan=True) + "\n\n" + format_submission_results(snapshot, results)
 
     def _run_auto_if_due(self) -> None:
         if not self.auto_enabled:
