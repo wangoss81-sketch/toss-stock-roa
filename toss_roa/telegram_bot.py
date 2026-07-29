@@ -232,7 +232,6 @@ def main_keyboard() -> dict[str, Any]:
             [{"text": "실행"}, {"text": "도움말"}],
         ],
         "resize_keyboard": True,
-        "is_persistent": True,
     }
 
 
